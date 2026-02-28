@@ -522,7 +522,7 @@ function swapOption(id: string) {
           background: linear-gradient(135deg, var(--bg1) 0%, var(--bg2) 45%, var(--bg3) 100%);
           position: relative;
           padding: clamp(12px, 2vh, 22px) clamp(16px, 3vw, 48px) clamp(14px, 2vh, 20px);
-          overflow: hidden;
+          overflow-x: hidden;
         }
 
         .pp-grid {
