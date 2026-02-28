@@ -425,6 +425,7 @@ function hasRedis() {
 
 async function redisPipeline(commands: any[]): Promise<any[]> {
   if (!UPSTASH_URL || !UPSTASH_TOKEN) throw new Error("Redis not configured");
+
   const res = await fetchWithTimeout(
     `${UPSTASH_URL}/pipeline`,
     {
@@ -433,12 +434,18 @@ async function redisPipeline(commands: any[]): Promise<any[]> {
         Authorization: `Bearer ${UPSTASH_TOKEN}`,
         "Content-Type": "application/json",
       },
-      body: JSON.stringify({ commands }),
+      // ✅ Upstash expects the array directly, not { commands: ... }
+      body: JSON.stringify(commands),
       cache: "no-store",
     },
     4000
   );
-  if (!res.ok) throw new Error(`Redis pipeline failed: ${res.status}`);
+
+  if (!res.ok) {
+    const text = await res.text().catch(() => "");
+    throw new Error(`Redis pipeline failed: ${res.status} ${text}`);
+  }
+
   return (await res.json()) as any[];
 }
 
