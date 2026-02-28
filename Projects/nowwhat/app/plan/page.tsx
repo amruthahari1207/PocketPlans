@@ -982,6 +982,28 @@ function swapOption(id: string) {
         }
         .pp-linkbtn:hover { transform: translateY(-1px); }
         .pp-linkicon { opacity: 0.65; font-weight: 900; }
+      
+         @media (max-width: 980px) {
+          .pp-page {
+            height: auto;
+            min-height: 100dvh;
+            overflow-y: auto;
+            overflow-x: hidden;
+        }
+
+          .pp-shell {
+            height: auto;
+            min-height: 0;
+          }
+
+          .pp-main {
+            overflow: visible;
+          }
+
+          .pp-right {
+            overflow: visible;
+          }
+        } 
       `}</style>
 
       <div className="pp-grid" aria-hidden="true" />
