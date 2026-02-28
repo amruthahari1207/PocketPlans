@@ -21,7 +21,7 @@ type City =
   | "Atlanta";
 
 type Option = {
-  id: string; // UI id (1..5)
+  id: string;
   name: string;
   category: string;
   rating: number;
@@ -31,7 +31,6 @@ type Option = {
   lat: number;
   lng: number;
   address: string;
-
   placeId?: string | null;
   closingTime?: string | null;
   photoUrls?: string[];
@@ -49,7 +48,7 @@ type ApiResponse = {
   meta?: {
     limitedAvailability?: boolean;
     reason?: string | null;
-    pool?: Option[]; // swap pool
+    pool?: Option[];
   };
   error?: string;
 };
@@ -70,8 +69,8 @@ type FreshnessStore = Record<
 >;
 
 const LS_KEY = "pp_freshness_v1";
-const SEEN_TTL_MS = 36 * 60 * 60 * 1000; // 36h
-const SWAP_TTL_MS = 48 * 60 * 60 * 1000; // 48h
+const SEEN_TTL_MS = 36 * 60 * 60 * 1000;
+const SWAP_TTL_MS = 48 * 60 * 60 * 1000;
 const MAX_SEEN = 60;
 const MAX_SWAPPED = 60;
 
@@ -125,7 +124,6 @@ export default function PlanPage() {
 
   useEffect(() => {
     let mounted = true;
-
     (async () => {
       const { data } = await supabase.auth.getUser();
       const email = data.user?.email ?? null;
@@ -189,6 +187,10 @@ export default function PlanPage() {
 
   // Toast
   const [toast, setToast] = useState<string | null>(null);
+
+  // Mobile modal
+  const [mobileModalOpen, setMobileModalOpen] = useState(false);
+
   useEffect(() => {
     if (!toast) return;
     const t = setTimeout(() => setToast(null), 2200);
@@ -207,13 +209,10 @@ export default function PlanPage() {
   function getCityFreshnessSets(currentCity: City) {
     const store = loadFreshness();
     const bucket = store[currentCity] ?? { recentSeen: [], recentSwapped: [] };
-
     bucket.recentSeen = pruneList(bucket.recentSeen, SEEN_TTL_MS, MAX_SEEN);
     bucket.recentSwapped = pruneList(bucket.recentSwapped, SWAP_TTL_MS, MAX_SWAPPED);
-
     store[currentCity] = bucket;
     saveFreshness(store);
-
     return {
       seenPlaceIds: bucket.recentSeen.map((x) => x.k),
       swappedPlaceIds: bucket.recentSwapped.map((x) => x.k),
@@ -223,7 +222,6 @@ export default function PlanPage() {
   function markSeen(currentCity: City, keys: string[]) {
     const store = loadFreshness();
     const bucket = store[currentCity] ?? { recentSeen: [], recentSwapped: [] };
-
     const t = nowMs();
     const existing = new Set(bucket.recentSeen.map((x) => x.k));
     for (const k of keys) {
@@ -231,10 +229,8 @@ export default function PlanPage() {
       if (existing.has(k)) continue;
       bucket.recentSeen.unshift({ k, ts: t });
     }
-
     bucket.recentSeen = pruneList(bucket.recentSeen, SEEN_TTL_MS, MAX_SEEN);
     bucket.recentSwapped = pruneList(bucket.recentSwapped, SWAP_TTL_MS, MAX_SWAPPED);
-
     store[currentCity] = bucket;
     saveFreshness(store);
   }
@@ -243,14 +239,11 @@ export default function PlanPage() {
     if (!key) return;
     const store = loadFreshness();
     const bucket = store[currentCity] ?? { recentSeen: [], recentSwapped: [] };
-
     const t = nowMs();
     const existing = new Set(bucket.recentSwapped.map((x) => x.k));
     if (!existing.has(key)) bucket.recentSwapped.unshift({ k: key, ts: t });
-
     bucket.recentSeen = pruneList(bucket.recentSeen, SEEN_TTL_MS, MAX_SEEN);
     bucket.recentSwapped = pruneList(bucket.recentSwapped, SWAP_TTL_MS, MAX_SWAPPED);
-
     store[currentCity] = bucket;
     saveFreshness(store);
   }
@@ -261,17 +254,10 @@ export default function PlanPage() {
 
     try {
       const freshness = getCityFreshnessSets(city);
-
       const res = await fetch("/api/plan", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          city,
-          vibe,
-          withWho,
-          vegFriendly,
-          ...freshness,
-        }),
+        body: JSON.stringify({ city, vibe, withWho, vegFriendly, ...freshness }),
       });
 
       let data: ApiResponse | null = null;
@@ -282,15 +268,9 @@ export default function PlanPage() {
       }
 
       if (!res.ok) {
-        if (res.status === 429) {
-          setToast(data?.error || "Too many requests — try again in a minute.");
-          return;
-        }
-        if (res.status === 500) {
-          setToast(data?.error || "Server error — check env vars / Redis config.");
-          return;
-        }
-        setToast(data?.error || "Couldn’t load plan. Check /api/plan.");
+        if (res.status === 429) { setToast(data?.error || "Too many requests — try again in a minute."); return; }
+        if (res.status === 500) { setToast(data?.error || "Server error — check env vars / Redis config."); return; }
+        setToast(data?.error || "Couldn't load plan. Check /api/plan.");
         return;
       }
 
@@ -299,38 +279,29 @@ export default function PlanPage() {
       setWeatherData(data?.weather ?? null);
       setLimitedAvailability(Boolean(data?.meta?.limitedAvailability));
       setMetaReason(data?.meta?.reason ?? null);
-
       setPool(Array.isArray(data?.meta?.pool) ? data!.meta!.pool! : []);
+
       const emptyBan = new Set<string>();
       setBannedKeys(emptyBan);
       bannedKeysRef.current = emptyBan;
 
       const firstOpen =
         newOptions.find((o) => !String(o.openStatus || "").toLowerCase().includes("closed"))?.id ??
-        newOptions[0]?.id ??
-        null;
+        newOptions[0]?.id ?? null;
       setActiveId(firstOpen);
 
       const keysToMark = newOptions.map((o) => optKey(o)).filter(Boolean);
       markSeen(city, keysToMark);
     } catch (e) {
       console.error(e);
-      setToast("Couldn’t load plan. Check /api/plan.");
+      setToast("Couldn't load plan. Check /api/plan.");
     } finally {
       setLoading(false);
     }
   }
 
   // ---------- Components ----------
-  function Pill({
-    active,
-    children,
-    onClick,
-  }: {
-    active?: boolean;
-    children: React.ReactNode;
-    onClick: () => void;
-  }) {
+  function Pill({ active, children, onClick }: { active?: boolean; children: React.ReactNode; onClick: () => void; }) {
     return (
       <button onClick={onClick} className={`pp-pill ${active ? "pp-pill-active" : ""}`} type="button">
         {children}
@@ -338,24 +309,11 @@ export default function PlanPage() {
     );
   }
 
-  function Toggle({
-    label,
-    checked,
-    onChange,
-  }: {
-    label: string;
-    checked: boolean;
-    onChange: (v: boolean) => void;
-  }) {
+  function Toggle({ label, checked, onChange }: { label: string; checked: boolean; onChange: (v: boolean) => void; }) {
     return (
       <div className="pp-toggle-row">
         <span className="pp-toggle-label">{label}</span>
-        <button
-          type="button"
-          className={`pp-toggle ${checked ? "pp-toggle-on" : ""}`}
-          onClick={() => onChange(!checked)}
-          aria-pressed={checked}
-        >
+        <button type="button" className={`pp-toggle ${checked ? "pp-toggle-on" : ""}`} onClick={() => onChange(!checked)} aria-pressed={checked}>
           <span className="pp-toggle-knob" />
         </button>
       </div>
@@ -366,14 +324,8 @@ export default function PlanPage() {
     const key = optKey(opt);
     setPicked((prev) => {
       const exists = prev.find((p) => optKey(p) === key);
-      if (exists) {
-        setToast("Removed from plan");
-        return prev.filter((p) => optKey(p) !== key);
-      }
-      if (prev.length >= 2) {
-        setToast("You can only pick 2 stops.");
-        return prev;
-      }
+      if (exists) { setToast("Removed from plan"); return prev.filter((p) => optKey(p) !== key); }
+      if (prev.length >= 2) { setToast("You can only pick 2 stops."); return prev; }
       setToast("Added to plan ✅");
       return [...prev, opt];
     });
@@ -383,96 +335,65 @@ export default function PlanPage() {
     setPicked((prev) => prev.filter((p) => optKey(p) !== key));
   }
 
-  // ✅ Swap from pool locally (no regen)
-  // ✅ Swap from pool locally (no regen) — with fallback passes
-function swapOption(id: string) {
-  setOptions((prev) => {
-    const idx = prev.findIndex((o) => o.id === id);
-    if (idx === -1) {
-      setToast("Swap failed — option not found.");
-      return prev;
-    }
+  function swapOption(id: string) {
+    setOptions((prev) => {
+      const idx = prev.findIndex((o) => o.id === id);
+      if (idx === -1) { setToast("Swap failed — option not found."); return prev; }
 
-    const removed = prev[idx];
-    const removedKey = optKey(removed);
+      const removed = prev[idx];
+      const removedKey = optKey(removed);
+      const used = new Set(prev.filter((o) => optKey(o) !== removedKey).map((o) => optKey(o)));
+      const bannedNow = bannedKeysRef.current;
 
-    const used = new Set(prev.filter((o) => optKey(o) !== removedKey).map((o) => optKey(o)));
-    const bannedNow = bannedKeysRef.current;
+      const catCount = new Map<string, number>();
+      for (const o of prev) {
+        if (optKey(o) === removedKey) continue;
+        const c = o.category || "Other";
+        catCount.set(c, (catCount.get(c) ?? 0) + 1);
+      }
 
-    // Count categories already in shortlist (excluding the removed one)
-    const catCount = new Map<string, number>();
-    for (const o of prev) {
-      if (optKey(o) === removedKey) continue;
-      const c = o.category || "Other";
-      catCount.set(c, (catCount.get(c) ?? 0) + 1);
-    }
+      const isClosed = (s: string) => String(s || "").toLowerCase().includes("closed");
+      const baseOk = (cand: Option) => {
+        const k = optKey(cand);
+        if (!k) return false;
+        if (k === removedKey) return false;
+        if (used.has(k)) return false;
+        if (bannedNow.has(k)) return false;
+        if (isClosed(cand.openStatus)) return false;
+        return true;
+      };
 
-    const isClosed = (s: string) => String(s || "").toLowerCase().includes("closed");
+      const pass1 = pool.find((cand) => { if (!baseOk(cand)) return false; const c = cand.category || "Other"; return (catCount.get(c) ?? 0) < 2; });
+      const pass2 = pool.find((cand) => { if (!baseOk(cand)) return false; const c = cand.category || "Other"; return (catCount.get(c) ?? 0) < 3; });
+      const pass3 = pool.find((cand) => baseOk(cand));
+      const next = pass1 ?? pass2 ?? pass3;
 
-    // Base constraints: must not be duplicate, must not be banned, must not be the removed place
-    const baseOk = (cand: Option) => {
-      const k = optKey(cand);
-      if (!k) return false;
-      if (k === removedKey) return false;
-      if (used.has(k)) return false;
-      if (bannedNow.has(k)) return false;
-      if (isClosed(cand.openStatus)) return false;
-      return true;
-    };
+      if (!next) { setToast("No more swap options right now. Try Generate again."); return prev; }
 
-    // PASS 1: keep diversity (<= 2 per category)
-    const pass1 = pool.find((cand) => {
-      if (!baseOk(cand)) return false;
-      const c = cand.category || "Other";
-      return (catCount.get(c) ?? 0) < 2;
+      markSwapped(city, removedKey);
+
+      const nextKey = optKey(next);
+      setBannedKeys((prevSet) => {
+        const s = new Set(prevSet);
+        if (nextKey) s.add(nextKey);
+        bannedKeysRef.current = s;
+        return s;
+      });
+
+      const replaced: Option = { ...next, id: removed.id };
+      const copy = [...prev];
+      copy[idx] = replaced;
+      markSeen(city, [optKey(replaced)]);
+      setToast("Swapped ✅");
+      return copy;
     });
+  }
 
-    // PASS 2: relax a bit (<= 3 per category)
-    const pass2 = pool.find((cand) => {
-      if (!baseOk(cand)) return false;
-      const c = cand.category || "Other";
-      return (catCount.get(c) ?? 0) < 3;
-    });
-
-    // PASS 3: no category cap (still safe: no dupes, no banned, no closed)
-    const pass3 = pool.find((cand) => baseOk(cand));
-
-    const next = pass1 ?? pass2 ?? pass3;
-
-    if (!next) {
-      setToast("No more swap options right now. Try Generate again.");
-      return prev;
-    }
-
-    // Only mark swapped out AFTER we actually swap
-    markSwapped(city, removedKey);
-
-    // Add swapped-in key to banned set so we don’t re-offer it immediately
-    const nextKey = optKey(next);
-    setBannedKeys((prevSet) => {
-      const s = new Set(prevSet);
-      if (nextKey) s.add(nextKey);
-      bannedKeysRef.current = s;
-      return s;
-    });
-
-    const replaced: Option = { ...next, id: removed.id };
-    const copy = [...prev];
-    copy[idx] = replaced;
-
-    markSeen(city, [optKey(replaced)]);
-    setToast("Swapped ✅");
-    return copy;
-  });
-}
-
-  const selectedContextPills = useMemo(() => {
-    return [
-      { label: vibe, kind: "green" },
-      { label: withWho, kind: "violet" },
-      { label: city, kind: "blue" },
-    ];
-  }, [vibe, withWho, city]);
+  const selectedContextPills = useMemo(() => [
+    { label: vibe, kind: "green" },
+    { label: withWho, kind: "violet" },
+    { label: city, kind: "blue" },
+  ], [vibe, withWho, city]);
 
   const mapsQuery = useMemo(() => {
     if (!activeOption) return "";
@@ -487,10 +408,7 @@ function swapOption(id: string) {
   }, [activeOption, mapsQuery]);
 
   const openCount = options.filter((o) => !String(o.openStatus || "").toLowerCase().includes("closed")).length;
-
-  const isLate =
-    weatherData?.cityLocalHour != null && (weatherData.cityLocalHour >= 21 || weatherData.cityLocalHour <= 5);
-
+  const isLate = weatherData?.cityLocalHour != null && (weatherData.cityLocalHour >= 21 || weatherData.cityLocalHour <= 5);
   const showLateHint = limitedAvailability && isLate && openCount <= 2;
 
   return (
@@ -982,28 +900,53 @@ function swapOption(id: string) {
         }
         .pp-linkbtn:hover { transform: translateY(-1px); }
         .pp-linkicon { opacity: 0.65; font-weight: 900; }
-      
-         @media (max-width: 980px) {
+
+        @media (max-width: 980px) {
+          html, body {
+            height: auto !important;
+            overflow-y: auto !important;
+          }
+
           .pp-page {
-            height: auto;
-            min-height: 100dvh;
-            overflow-y: auto;
+            height: auto !important;
+            min-height: 100vh;
+            overflow-y: auto !important;
             overflow-x: hidden;
-        }
+          }
 
           .pp-shell {
-            height: auto;
+            height: auto !important;
             min-height: 0;
           }
 
           .pp-main {
-            overflow: visible;
+            grid-template-columns: 1fr;
+            overflow: visible !important;
+            height: auto !important;
           }
 
+          .pp-left,
           .pp-right {
-            overflow: visible;
+            height: auto !important;
+            overflow: visible !important;
           }
-        } 
+
+          .pp-right-body {
+            grid-template-columns: 1fr;
+            overflow: visible !important;
+            height: auto !important;
+          }
+
+          .pp-list {
+            overflow: visible !important;
+            padding-right: 0;
+            height: auto !important;
+          }
+
+          .pp-card {
+            overflow: visible !important;
+          }
+        }
       `}</style>
 
       <div className="pp-grid" aria-hidden="true" />
@@ -1032,13 +975,7 @@ function swapOption(id: string) {
                   </button>
                 ) : (
                   <>
-                    <button
-                      className="pp-menu-item"
-                      onClick={() => {
-                        setMenuOpen(false);
-                        setToast("Profile settings coming next.");
-                      }}
-                    >
+                    <button className="pp-menu-item" onClick={() => { setMenuOpen(false); setToast("Profile settings coming next."); }}>
                       Profile <span>⚙️</span>
                     </button>
                     <button className="pp-menu-item pp-menu-danger" onClick={signOut}>
@@ -1057,9 +994,7 @@ function swapOption(id: string) {
           <section className="pp-card pp-left">
             <div>
               <h1 className="pp-h1">Planner</h1>
-              <div className="pp-sub">
-                Pick the vibe, with who and we'll do the rest!
-              </div>
+              <div className="pp-sub">Pick the vibe, with who and we'll do the rest!</div>
             </div>
 
             <div className="pp-section">
@@ -1082,9 +1017,7 @@ function swapOption(id: string) {
               <div className="pp-label">Vibe (high signal)</div>
               <div className="pp-row">
                 {(["Cozy", "Social", "Productive", "Outdoors", "Luxury"] as Vibe[]).map((x) => (
-                  <Pill key={x} active={vibe === x} onClick={() => setVibe(x)}>
-                    {x}
-                  </Pill>
+                  <Pill key={x} active={vibe === x} onClick={() => setVibe(x)}>{x}</Pill>
                 ))}
               </div>
             </div>
@@ -1093,9 +1026,7 @@ function swapOption(id: string) {
               <div className="pp-label">With</div>
               <div className="pp-row">
                 {(["Solo", "Friends", "Date", "Family"] as With[]).map((x) => (
-                  <Pill key={x} active={withWho === x} onClick={() => setWithWho(x)}>
-                    {x}
-                  </Pill>
+                  <Pill key={x} active={withWho === x} onClick={() => setWithWho(x)}>{x}</Pill>
                 ))}
               </div>
             </div>
@@ -1111,13 +1042,7 @@ function swapOption(id: string) {
               <button className="pp-gen-btn primary" onClick={fetchPlan} disabled={loading}>
                 {loading ? "Generating…" : "Generate"}
               </button>
-              <button
-                className="pp-gen-btn"
-                onClick={() => {
-                  setPicked([]);
-                  setToast("Plan cleared");
-                }}
-              >
+              <button className="pp-gen-btn" onClick={() => { setPicked([]); setToast("Plan cleared"); }}>
                 Clear Plan
               </button>
             </div>
@@ -1130,15 +1055,9 @@ function swapOption(id: string) {
                 <h2 className="pp-right-title">Your shortlist</h2>
                 <div className="pp-right-sub">{options.length || 0} options — click a card to see details.</div>
               </div>
-
               <div className="pp-context-pills">
                 {selectedContextPills.map((p) => (
-                  <span
-                    key={p.label}
-                    className={`pp-mini-pill ${
-                      p.kind === "green" ? "k-green" : p.kind === "violet" ? "k-violet" : "k-blue"
-                    }`}
-                  >
+                  <span key={p.label} className={`pp-mini-pill ${p.kind === "green" ? "k-green" : p.kind === "violet" ? "k-violet" : "k-blue"}`}>
                     {p.label}
                   </span>
                 ))}
@@ -1155,21 +1074,10 @@ function swapOption(id: string) {
                   <br />
                   Forecast (3-hr blocks):{" "}
                   {(weatherData.nextHours ?? []).map((h, idx) => (
-                    <span key={idx} style={{ marginRight: 10 }}>
-                      {blockLabel(idx, h.timeLabel)} {h.temp}°C
-                    </span>
+                    <span key={idx} style={{ marginRight: 10 }}>{blockLabel(idx, h.timeLabel)} {h.temp}°C</span>
                   ))}
                   {(weatherData.alerts ?? []).length > 0 && (
-                    <>
-                      <br />
-                      <span>
-                        {(weatherData.alerts ?? []).map((a, i) => (
-                          <span key={i} style={{ marginRight: 10 }}>
-                            ⚠ {a}
-                          </span>
-                        ))}
-                      </span>
-                    </>
+                    <><br /><span>{(weatherData.alerts ?? []).map((a, i) => <span key={i} style={{ marginRight: 10 }}>⚠ {a}</span>)}</span></>
                   )}
                 </span>
               ) : (
@@ -1179,9 +1087,7 @@ function swapOption(id: string) {
 
             {limitedAvailability && (
               <div className="pp-limited">
-                {showLateHint
-                  ? "It’s late there — fewer places are open right now."
-                  : `Limited matches — ${metaReason ?? "Try loosening filters."}`}
+                {showLateHint ? "It's late there — fewer places are open right now." : `Limited matches — ${metaReason ?? "Try loosening filters."}`}
               </div>
             )}
 
@@ -1192,18 +1098,14 @@ function swapOption(id: string) {
               </div>
               <div className="pp-planchips">
                 {picked.length === 0 ? (
-                  <span className="pp-chip" style={{ opacity: 0.7 }}>
-                    No stops picked yet
-                  </span>
+                  <span className="pp-chip" style={{ opacity: 0.7 }}>No stops picked yet</span>
                 ) : (
                   picked.map((p) => {
                     const key = optKey(p);
                     return (
                       <span key={key} className="pp-chip">
                         {clampText(p.name, 24)}
-                        <button className="pp-chip-x" onClick={() => removeFromPlan(key)} aria-label="Remove">
-                          ×
-                        </button>
+                        <button className="pp-chip-x" onClick={() => removeFromPlan(key)} aria-label="Remove">×</button>
                       </span>
                     );
                   })
@@ -1241,33 +1143,28 @@ function swapOption(id: string) {
                         <div
                           key={key}
                           className={`pp-option ${isActive ? "active" : ""}`}
-                          onClick={() => setActiveId(o.id)}
+                          onClick={() => {
+                            setActiveId(o.id);
+                            if (window.innerWidth <= 980) setMobileModalOpen(true);
+                          }}
                           role="button"
                           tabIndex={0}
                         >
                           <div className="pp-option-name">{o.name}</div>
                           <div className="pp-option-meta">
-                            {o.category.charAt(0).toUpperCase() + o.category.slice(1)} • ⭐ {o.rating.toFixed(1)} •{" "}
-                            {o.openStatus}
+                            {o.category.charAt(0).toUpperCase() + o.category.slice(1)} • ⭐ {o.rating.toFixed(1)} • {o.openStatus}
                           </div>
-
                           <div className="pp-option-why">{o.why}</div>
-
                           <div className="pp-tags">
                             {(o.watchouts ?? []).slice(0, 2).map((w, idx) => (
-                              <span key={`${key}-w-${idx}`} className="pp-tag pp-tag-warn">
-                                ⚠ {w}
-                              </span>
+                              <span key={`${key}-w-${idx}`} className="pp-tag pp-tag-warn">⚠ {w}</span>
                             ))}
                           </div>
-
                           <div className="pp-actions" onClick={(e) => e.stopPropagation()}>
                             <button className={`pp-btn ${isPicked ? "" : "pp-btn-primary"}`} onClick={() => addToPlan(o)}>
                               {isPicked ? "Remove" : "Add to plan"}
                             </button>
-                            <button className="pp-btn" onClick={() => swapOption(o.id)}>
-                              Swap
-                            </button>
+                            <button className="pp-btn" onClick={() => swapOption(o.id)}>Swap</button>
                           </div>
                         </div>
                       );
@@ -1275,7 +1172,7 @@ function swapOption(id: string) {
                 )}
               </div>
 
-              {/* Details */}
+              {/* Details — desktop only */}
               <aside className="pp-details" aria-label="Place details">
                 {activeOption ? (
                   <>
@@ -1296,7 +1193,6 @@ function swapOption(id: string) {
                     ) : (
                       <div className="pp-photo-empty">Photos not available</div>
                     )}
-
                     <div className="pp-linkbtns">
                       <a className="pp-linkbtn" href={placeGoogleUrl} target="_blank" rel="noreferrer">
                         View on Google <span className="pp-linkicon">↗</span>
@@ -1306,9 +1202,7 @@ function swapOption(id: string) {
                 ) : (
                   <div style={{ padding: 16 }}>
                     <div className="pp-details-title">Pick a card</div>
-                    <div style={{ color: "#64748b", fontSize: 13, marginTop: 8 }}>
-                      Click any option on the left to see details.
-                    </div>
+                    <div style={{ color: "#64748b", fontSize: 13, marginTop: 8 }}>Click any option on the left to see details.</div>
                   </div>
                 )}
               </aside>
@@ -1316,9 +1210,79 @@ function swapOption(id: string) {
           </section>
         </div>
       </div>
+
+      {/* Mobile modal — only shows on phone when a card is tapped */}
+      {mobileModalOpen && activeOption && (
+        <div
+          style={{
+            position: "fixed", inset: 0, zIndex: 99999,
+            background: "rgba(0,0,0,0.5)",
+            display: "flex", alignItems: "flex-end",
+          }}
+          onClick={() => setMobileModalOpen(false)}
+        >
+          <div
+            style={{
+              width: "100%", background: "#fff",
+              borderRadius: "24px 24px 0 0",
+              padding: "20px", paddingBottom: "34px",
+              maxHeight: "70vh", overflowY: "auto",
+            }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div style={{ fontWeight: 900, fontSize: 16, marginBottom: 4 }}>{activeOption.name}</div>
+            <div style={{ fontSize: 13, color: "#64748b", marginBottom: 14 }}>
+              {activeOption.category} • ⭐ {activeOption.rating.toFixed(1)} • {activeOption.openStatus}
+            </div>
+
+            {Array.isArray(activeOption.photoUrls) && activeOption.photoUrls.length > 0 ? (
+              <div style={{ display: "flex", gap: 10, overflowX: "auto", marginBottom: 14 }}>
+                {activeOption.photoUrls.slice(0, 8).map((url, idx) => (
+                  <img
+                    key={idx}
+                    src={url}
+                    alt={`${activeOption.name} photo ${idx + 1}`}
+                    style={{ height: 180, minWidth: 260, objectFit: "cover", borderRadius: 14, flexShrink: 0 }}
+                  />
+                ))}
+              </div>
+            ) : (
+              <div style={{ height: 100, display: "grid", placeItems: "center", color: "#64748b", fontSize: 13, marginBottom: 14 }}>
+                No photos available
+              </div>
+            )}
+
+            <a
+              href={placeGoogleUrl}
+              target="_blank"
+              rel="noreferrer"
+              style={{
+                display: "flex", alignItems: "center", justifyContent: "space-between",
+                padding: "12px 14px", borderRadius: 14,
+                border: "1px solid rgba(0,0,0,0.10)",
+                background: "rgba(0,0,0,0.04)",
+                fontWeight: 900, fontSize: 13,
+                textDecoration: "none", color: "#0f172a",
+                marginBottom: 12,
+              }}
+            >
+              View on Google <span>↗</span>
+            </a>
+
+            <button
+              onClick={() => setMobileModalOpen(false)}
+              style={{
+                width: "100%", padding: "12px", borderRadius: 999,
+                border: "1px solid rgba(0,0,0,0.10)",
+                background: "rgba(0,0,0,0.04)",
+                fontWeight: 900, fontSize: 13, cursor: "pointer",
+              }}
+            >
+              Close
+            </button>
+          </div>
+        </div>
+      )}
     </main>
   );
 }
-      
-
- 
