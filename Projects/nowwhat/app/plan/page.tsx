@@ -400,10 +400,11 @@ export default function PlanPage() {
     return `${activeOption.name} ${activeOption.address} ${city}`;
   }, [activeOption, city]);
 
+// AFTER
   const placeGoogleUrl = useMemo(() => {
     if (!activeOption) return "";
     const pid = (activeOption.placeId ?? "").trim();
-    if (pid) return `https://www.google.com/maps/place/?q=place_id:${encodeURIComponent(pid)}`;
+    if (pid) return `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(activeOption.name)}&query_place_id=${encodeURIComponent(pid)}`;
     return `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(mapsQuery)}`;
   }, [activeOption, mapsQuery]);
 
@@ -839,6 +840,7 @@ export default function PlanPage() {
           min-height: 0;
           display: flex;
           flex-direction: column;
+          min-height: 280px;
         }
 
         .pp-details-title { font-weight: 950; font-size: 13px; }
@@ -875,14 +877,14 @@ export default function PlanPage() {
           .pp-main { grid-template-columns: 1fr; }
         }
 
-        .pp-photo { width: 100%; height: 210px; border: none; background: rgba(0,0,0,0.04); position: relative; }
+        .pp-photo { width: 100%; height: 180px; border: none; background: rgba(0,0,0,0.04); position: relative; }
         .pp-photo-strip { display: flex; gap: 10px; overflow-x: auto; scroll-snap-type: x mandatory; padding: 10px; height: 100%; }
         .pp-photo-strip::-webkit-scrollbar { height: 8px; }
         .pp-photo-strip::-webkit-scrollbar-thumb { background: rgba(0,0,0,0.12); border-radius: 999px; }
         .pp-photo-img { height: 100%; min-width: 100%; object-fit: cover; border-radius: 14px; scroll-snap-align: start; border: 1px solid rgba(0,0,0,0.06); }
         .pp-photo-empty { height: 210px; display: grid; place-items: center; font-weight: 800; font-size: 13px; color: #64748b; background: rgba(248,250,252,0.8); }
 
-        .pp-linkbtns { display: flex; flex-direction: column; gap: 8px; padding: 12px; }
+        .pp-linkbtns { display: flex; flex-direction: column; gap: 8px; padding: 12px; flex-shrink: 0; }
         .pp-linkbtn {
           width: 100%;
           display: inline-flex;
